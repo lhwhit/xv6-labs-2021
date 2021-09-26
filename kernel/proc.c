@@ -5,7 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#include "sysinfo.h"
 
 struct cpu cpus[NCPU];
 
@@ -128,6 +127,13 @@ found:
     return 0;
   }
 
+  // Allocate a share page.
+  if((p->usyscall = (struct usyscall *)kalloc()) == 0){
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -154,6 +160,9 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if (p->usyscall)
+    kfree((void*)p->usyscall);
+  p->usyscall = 0;
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -167,6 +176,11 @@ freeproc(struct proc *p)
   p->state = UNUSED;
 }
 
+/*
+ * the kernel's page table.
+ */
+extern pagetable_t kernel_pagetable;
+
 // Create a user page table for a given process,
 // with no user memory, but with trampoline pages.
 pagetable_t
@@ -179,6 +193,18 @@ proc_pagetable(struct proc *p)
   if(pagetable == 0)
     return 0;
 
+  if (mappages(kernel_pagetable, USYSCALL,  PGSIZE,
+              (uint64)p->usyscall, PTE_R | PTE_W)<0) {
+    uvmfree(pagetable, 0);
+    kfree(p->usyscall);
+    return 0;
+  }
+  kvminithart();
+  struct usyscall *u = (struct usyscall *)USYSCALL;
+  u->pid = p->pid;
+  uvmunmap(kernel_pagetable, USYSCALL, 1, 0);
+  kvminithart();
+
   // map the trampoline code (for system call return)
   // at the highest user virtual address.
   // only the supervisor uses it, on the way
@@ -186,6 +212,7 @@ proc_pagetable(struct proc *p)
   if(mappages(pagetable, TRAMPOLINE, PGSIZE,
               (uint64)trampoline, PTE_R | PTE_X) < 0){
     uvmfree(pagetable, 0);
+    kfree(p->usyscall);
     return 0;
   }
 
@@ -194,6 +221,17 @@ proc_pagetable(struct proc *p)
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
     uvmfree(pagetable, 0);
+    kfree(p->usyscall);
+    return 0;
+  }
+
+  // map the USYSCALL just below TRAPFRAME.
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+               (uint64)(p->usyscall), PTE_R | PTE_U) < 0){
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    kfree(p->usyscall);
     return 0;
   }
 
@@ -207,6 +245,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
@@ -289,9 +328,6 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
-
-  // copy trace mask
-  np->trace_mask = p->trace_mask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -657,39 +693,4 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
-}
-
-// get number of proc
-uint64
-nproc(void)
-{
-   uint64 counter = 0;
-   struct proc *p;
-   // 遍历进程控制块，即OS课程中的PCB
-   for(p = proc; p < &proc[NPROC]; p++) { 
-      acquire(&p->lock);
-      if(p->state != UNUSED) {
-         ++counter;
-      }
-      release(&p->lock);
-   }
-   return counter;
-}
-
-// get sysinfo
-uint64
-sys_sysinfo(void)
-{
-   uint64 info; // user pointer
-   struct sysinfo kinfo;
-   struct proc *p = myproc();
-   if(argaddr(0, &info) < 0){
-       return -1;
-   }
-   kinfo.freemem = freemem();
-   kinfo.nproc = nproc();
-   if(copyout(p->pagetable, info, (char*)&kinfo, sizeof(kinfo)) < 0){
-        return -1;
-   }
-   return 0;
 }
