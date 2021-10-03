@@ -134,6 +134,8 @@ found:
 	return 0;
   }
 
+  memmove(p->usyscall, &p->pid, 8);
+
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
@@ -202,17 +204,6 @@ proc_pagetable(struct proc *p)
     uvmfree(pagetable, 0);
     return 0;
   }
-
-  if (mappages(kernel_pagetable, USYSCALL, PGSIZE,
-			  (uint64)p->usyscall, PTE_R | PTE_W) < 0){
-    uvmfree(pagetable,0);
-	  return 0;
-  }
-  kvminithart();
-  struct usyscall *u = (struct usyscall *)USYSCALL;
-  u->pid = p->pid;
-  uvmunmap(kernel_pagetable, USYSCALL, 1, 0);
-  kvminithart();
 
   // map the trapframe just below TRAMPOLINE, for trampoline.S.
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
