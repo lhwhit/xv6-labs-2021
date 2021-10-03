@@ -1,0 +1,22 @@
+iscv64-linux-gnu-objdump -S kernel/kernel > kernel/kernel.asm
+riscv64-linux-gnu-objdump -t kernel/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$/d' > kernel/kernel.sym
+make[1]: Leaving directory '/home/os/xv6-labs-2021'
+== Test answers-traps.txt == answers-traps.txt: FAIL 
+    Cannot read answers-traps.txt
+== Test backtrace test == 
+$ make qemu-gdb
+backtrace test: OK (4.3s) 
+== Test running alarmtest == 
+$ make qemu-gdb
+(4.1s) 
+== Test   alarmtest: test0 == 
+  alarmtest: test0: OK 
+== Test   alarmtest: test1 == 
+  alarmtest: test1: OK 
+== Test   alarmtest: test2 == 
+  alarmtest: test2: OK 
+== Test usertests == 
+$ make qemu-gdb
+^Cmake: *** [Makefile:337: grade] Error 1
+
+
