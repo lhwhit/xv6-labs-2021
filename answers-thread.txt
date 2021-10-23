@@ -1,9 +1,0 @@
-os@os:~/xv6-labs-2021$ ./ph 1
-100000 puts, 6.909 seconds, 14474 puts/second
-0: 0 keys missing
-100000 gets, 6.973 seconds, 14341 gets/second
-os@os:~/xv6-labs-2021$ ./ph 2
-100000 puts, 8.269 seconds, 12093 puts/second
-0: 0 keys missing
-1: 0 keys missing
-200000 gets, 7.018 seconds, 28497 gets/second
