@@ -52,10 +52,9 @@ usertrap(void)
   
   if(r_scause() == 8){
     // system call
-
-    if(p->killed)
+  if(p->killed)
       exit(-1);
-
+      
     // sepc points to the ecall instruction,
     // but we want to return to the next instruction.
     p->trapframe->epc += 4;
@@ -65,6 +64,12 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 15 || r_scause() == 13) {
+    // page fault
+    if(mmap_handler(r_stval(), r_scause()) != 0){
+      printf("page fault\n");
+      p->killed = 1;
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
